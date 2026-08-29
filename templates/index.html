@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Universal Dataset → Excel</title>
+  <meta name="description" content="Paste a public dataset URL and convert it to Excel.">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="badge">UNIVERSAL DATASET CONVERTER</div>
+      <h1>URL → Excel</h1>
+      <p class="subtitle">
+        Paste a public dataset or file URL. No terminal commands, no Python,
+        and no installation for the user.
+      </p>
+
+      <form id="convertForm" class="card">
+        <label for="url">Dataset URL</label>
+        <div class="input-row">
+          <input
+            id="url"
+            name="url"
+            type="url"
+            placeholder="https://github.com/user/repo/blob/main/data.csv"
+            autocomplete="off"
+            required
+          >
+          <button id="convertBtn" type="submit">Convert to Excel</button>
+        </div>
+        <div class="examples">
+          Supports GitHub, Hugging Face, direct file URLs, archives, and many
+          structured/document formats.
+        </div>
+      </form>
+
+      <section id="status" class="status hidden"></section>
+      <section id="results" class="results hidden"></section>
+
+      <div class="feature-grid">
+        <div><strong>1</strong><span>Paste URL</span></div>
+        <div><strong>2</strong><span>Server detects format</span></div>
+        <div><strong>3</strong><span>Excel is generated</span></div>
+        <div><strong>4</strong><span>Click Download</span></div>
+      </div>
+
+      <p class="note">
+        The website can only access URLs that are publicly reachable from the
+        server. Login/CAPTCHA/private resources cannot be bypassed.
+      </p>
+    </section>
+  </main>
+
+<script>
+const form = document.getElementById("convertForm");
+const btn = document.getElementById("convertBtn");
+const statusBox = document.getElementById("status");
+const results = document.getElementById("results");
+
+function showStatus(message, type="info") {
+  statusBox.className = "status " + type;
+  statusBox.textContent = message;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  }[c]));
+}
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const url = document.getElementById("url").value.trim();
+  if (!url) return;
+
+  btn.disabled = true;
+  btn.textContent = "Converting…";
+  results.className = "results hidden";
+  results.innerHTML = "";
+  showStatus("Downloading and converting. Large datasets may take some time.", "info");
+
+  try {
+    const body = new FormData();
+    body.append("url", url);
+
+    const response = await fetch("/api/convert", {
+      method: "POST",
+      body
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || "Conversion failed.");
+    }
+
+    showStatus(data.message, "success");
+
+    const cards = data.files.map(file => `
+      <div class="file-card">
+        <div>
+          <div class="file-name">${esc(file.name)}</div>
+          <div class="file-meta">${(file.size / 1024 / 1024).toFixed(2)} MB</div>
+        </div>
+        <a class="download" href="${file.download_url}">Download Excel</a>
+      </div>
+    `).join("");
+
+    results.innerHTML = `
+      <div class="results-head">
+        <h2>Your Excel file${data.files.length > 1 ? "s" : ""} are ready</h2>
+        ${data.files.length > 1
+          ? `<a class="download all" href="${data.download_all_url}">Download All (.ZIP)</a>`
+          : ""}
+      </div>
+      ${cards}
+    `;
+    results.className = "results";
+
+  } catch (error) {
+    showStatus(error.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Convert to Excel";
+  }
+});
+</script>
+</body>
+</html>
